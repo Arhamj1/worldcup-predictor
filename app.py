@@ -180,13 +180,14 @@ if 'selected_group' not in st.session_state:
     st.session_state.selected_group = None
 
 # header
+pythoncol1, col2, col3 = st.columns([1, 1, 1])
+with col2:
+    st.image('logo.jpeg', width=250)
+
 st.markdown("""
-    <h1 style='text-align: center; color: white;'>
-        ⚽ FIFA World Cup 2026
-    </h1>
-    <h3 style='text-align: center; color: #aaaaaa;'>
+    <h2 style='text-align: center; color: white; margin-top: 0;'>
         Group Stage Predictor
-    </h3>
+    </h2>
     <hr>
 """, unsafe_allow_html=True)
 
