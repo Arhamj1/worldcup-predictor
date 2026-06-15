@@ -20,6 +20,22 @@ def get_result(row):
 
 df['result'] = df.apply(get_result, axis=1)
 
+# all 12 groups
+GROUPS = {
+    'A': ['Mexico', 'South Africa', 'South Korea', 'Czechia'],
+    'B': ['Canada', 'Bosnia and Herzegovina', 'Qatar', 'Switzerland'],
+    'C': ['Brazil', 'Morocco', 'Haiti', 'Scotland'],
+    'D': ['United States', 'Paraguay', 'Australia', 'Turkey'],
+    'E': ['Germany', 'Curacao', 'Ivory Coast', 'Ecuador'],
+    'F': ['Netherlands', 'Japan', 'Sweden', 'Tunisia'],
+    'G': ['Belgium', 'Egypt', 'Iran', 'New Zealand'],
+    'H': ['Spain', 'Cabo Verde', 'Saudi Arabia', 'Uruguay'],
+    'I': ['France', 'Senegal', 'Iraq', 'Norway'],
+    'J': ['Argentina', 'Algeria', 'Austria', 'Jordan'],
+    'K': ['Portugal', 'Congo DR', 'Uzbekistan', 'Colombia'],
+    'L': ['England', 'Croatia', 'Ghana', 'Panama'],
+}
+
 def get_team_matches(data, team):
     matches = data[(data['home_team'] == team) | (data['away_team'] == team)]
     return matches.sort_values('date')
@@ -77,115 +93,119 @@ def get_h2h(data, team_a, team_b):
         'team_b_h2h_winrate': team_b_wins / total,
     }
 
+def predict_match(team_a, team_b):
+    a_winrate = get_win_rate(df, team_a)
+    b_winrate = get_win_rate(df, team_b)
+    a_goals = get_avg_goals(df, team_a)
+    b_goals = get_avg_goals(df, team_b)
+    h2h = get_h2h(df, team_a, team_b)
+
+    input_features = np.array([[
+        a_winrate, b_winrate,
+        a_goals['avg_scored'], a_goals['avg_conceded'],
+        b_goals['avg_scored'], b_goals['avg_conceded'],
+        h2h['team_a_h2h_winrate'], h2h['team_b_h2h_winrate']
+    ]])
+
+    prediction = model.predict(input_features)[0]
+    probabilities = model.predict_proba(input_features)[0]
+    classes = list(model.classes_)
+
+    return {
+        'prediction': prediction,
+        'home_win_prob': probabilities[classes.index('home win')],
+        'draw_prob': probabilities[classes.index('draw')],
+        'away_win_prob': probabilities[classes.index('away win')],
+    }
+
+def get_group_matches(teams):
+    # generate all 3v3 matchups in a group (each pair plays once)
+    matches = []
+    for i in range(len(teams)):
+        for j in range(i+1, len(teams)):
+            matches.append((teams[i], teams[j]))
+    return matches
+
+def predict_group_standings(teams):
+    points = {team: 0 for team in teams}
+    gd = {team: 0 for team in teams}  # goal difference estimate
+
+    matches = get_group_matches(teams)
+    for team_a, team_b in matches:
+        result = predict_match(team_a, team_b)
+        pred = result['prediction']
+        if pred == 'home win':
+            points[team_a] += 3
+            gd[team_a] += 1
+            gd[team_b] -= 1
+        elif pred == 'away win':
+            points[team_b] += 3
+            gd[team_b] += 1
+            gd[team_a] -= 1
+        else:
+            points[team_a] += 1
+            points[team_b] += 1
+
+    standings = pd.DataFrame({
+        'Team': list(points.keys()),
+        'Predicted Points': list(points.values()),
+        'Goal Diff': list(gd.values())
+    }).sort_values(['Predicted Points', 'Goal Diff'], ascending=False).reset_index(drop=True)
+    standings.index += 1
+    return standings, matches
+
 # page config
-st.set_page_config(page_title="World Cup 2026 Predictor", page_icon="⚽")
-st.title("⚽ World Cup 2026 Match Predictor")
-st.write("Select two teams to predict the match outcome")
+st.set_page_config(page_title="World Cup 2026 Predictor", page_icon="⚽", layout="wide")
+st.title("⚽ FIFA World Cup 2026 — Group Stage Predictor")
+st.write("Select a group to see match predictions and predicted standings")
 
-# get all teams
-all_teams = sorted(list(set(df['home_team'].tolist() + df['away_team'].tolist())))
+# group selector
+selected_group = st.selectbox(
+    "Select a Group",
+    [f"Group {g}" for g in GROUPS.keys()]
+)
 
-# team selection
-col1, col2 = st.columns(2)
-with col1:
-    team_a = st.selectbox("Select Team A", all_teams, index=all_teams.index('Brazil'))
-with col2:
-    team_b = st.selectbox("Select Team B", all_teams, index=all_teams.index('Argentina'))
+group_letter = selected_group.split(" ")[1]
+teams = GROUPS[group_letter]
 
-if st.button("Predict", use_container_width=True):
-    if team_a == team_b:
-        st.error("Please select two different teams")
+st.subheader(f"Group {group_letter} — {' | '.join(teams)}")
+
+with st.spinner("Running predictions..."):
+    standings, matches = predict_group_standings(teams)
+
+# predicted standings
+st.subheader("📊 Predicted Group Standings")
+st.dataframe(standings, use_container_width=True)
+st.caption("🟢 Top 2 predicted to advance automatically")
+
+# match predictions
+st.subheader("🔮 Match Predictions")
+
+for team_a, team_b in matches:
+    result = predict_match(team_a, team_b)
+    pred = result['prediction']
+
+    if pred == 'home win':
+        winner = team_a
+    elif pred == 'away win':
+        winner = team_b
     else:
-        with st.spinner("Calculating..."):
-            a_winrate = get_win_rate(df, team_a)
-            b_winrate = get_win_rate(df, team_b)
-            a_goals = get_avg_goals(df, team_a)
-            b_goals = get_avg_goals(df, team_b)
-            h2h = get_h2h(df, team_a, team_b)
+        winner = 'Draw'
 
-            input_features = np.array([[
-                a_winrate,
-                b_winrate,
-                a_goals['avg_scored'],
-                a_goals['avg_conceded'],
-                b_goals['avg_scored'],
-                b_goals['avg_conceded'],
-                h2h['team_a_h2h_winrate'],
-                h2h['team_b_h2h_winrate']
-            ]])
+    with st.expander(f"{team_a} vs {team_b} — Predicted: {'🤝 Draw' if winner == 'Draw' else '🏆 ' + winner}"):
+        fig = go.Figure(go.Bar(
+            x=[team_a + ' wins', 'Draw', team_b + ' wins'],
+            y=[result['home_win_prob'], result['draw_prob'], result['away_win_prob']],
+            marker_color=['#2ecc71', '#95a5a6', '#e74c3c']
+        ))
+        fig.update_layout(
+            yaxis_tickformat='.0%',
+            yaxis_range=[0, 1],
+            height=300
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-            prediction = model.predict(input_features)[0]
-            probabilities = model.predict_proba(input_features)[0]
-            classes = model.classes_
-
-            # show prediction
-            st.subheader("Prediction")
-            if prediction == 'home win':
-                st.success(f"🏆 {team_a} wins")
-            elif prediction == 'away win':
-                st.success(f"🏆 {team_b} wins")
-            else:
-                st.info("🤝 Draw")
-
-            # probability chart
-            fig = go.Figure(go.Bar(
-                x=[team_a + ' wins', 'Draw', team_b + ' wins'],
-                y=[
-                    probabilities[list(classes).index('home win')],
-                    probabilities[list(classes).index('draw')],
-                    probabilities[list(classes).index('away win')]
-                ],
-                marker_color=['#1f77b4', '#aec7e8', '#ff7f0e']
-            ))
-            fig.update_layout(
-                title='Win Probabilities',
-                yaxis_tickformat='.0%',
-                yaxis_range=[0, 1]
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            # team stats
-            st.subheader("Team Stats (last 10 matches)")
-            stats_col1, stats_col2 = st.columns(2)
-            with stats_col1:
-                st.metric(f"{team_a} Win Rate", f"{a_winrate:.0%}")
-                st.metric(f"{team_a} Avg Goals Scored", f"{a_goals['avg_scored']:.1f}")
-                st.metric(f"{team_a} Avg Goals Conceded", f"{a_goals['avg_conceded']:.1f}")
-            with stats_col2:
-                st.metric(f"{team_b} Win Rate", f"{b_winrate:.0%}")
-                st.metric(f"{team_b} Avg Goals Scored", f"{b_goals['avg_scored']:.1f}")
-                st.metric(f"{team_b} Avg Goals Conceded", f"{b_goals['avg_conceded']:.1f}")
-
-                # head to head history
-            st.subheader(f"Last 5 Head to Head Matches")
-            
-            h2h_matches = df[
-                ((df['home_team'] == team_a) & (df['away_team'] == team_b)) |
-                ((df['home_team'] == team_b) & (df['away_team'] == team_a))
-            ].sort_values('date', ascending=False).head(5)
-
-            if len(h2h_matches) == 0:
-                st.write("No previous meetings found")
-            else:
-                for _, match in h2h_matches.iterrows():
-                    date = match['date'].strftime('%d %b %Y')
-                    home = match['home_team']
-                    away = match['away_team']
-                    hs = int(match['home_score'])
-                    as_ = int(match['away_score'])
-                    tournament = match['tournament']
-                    
-                    # figure out winner for color
-                    if hs > as_:
-                        winner = home
-                    elif as_ > hs:
-                        winner = away
-                    else:
-                        winner = 'Draw'
-                    
-                    st.markdown(f"""
-                    **{date}** — {tournament}  
-                    {home} **{hs} - {as_}** {away} &nbsp; 
-                    {'🏆 ' + winner if winner != 'Draw' else '🤝 Draw'}
-                    """)
-                    st.divider()
+        col1, col2, col3 = st.columns(3)
+        col1.metric(f"{team_a} Win", f"{result['home_win_prob']:.0%}")
+        col2.metric("Draw", f"{result['draw_prob']:.0%}")
+        col3.metric(f"{team_b} Win", f"{result['away_win_prob']:.0%}")
