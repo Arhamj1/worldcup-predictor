@@ -182,7 +182,7 @@ if 'selected_group' not in st.session_state:
 # header
 pythoncol1, col2, col3 = st.columns([1, 1, 1])
 with col2:
-    st.image('logo.jpeg', width=250)
+    st.image('logo.jpg', width=250)
 
 st.markdown("""
     <h2 style='text-align: center; color: white; margin-top: 0;'>
