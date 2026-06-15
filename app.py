@@ -20,7 +20,6 @@ def get_result(row):
 
 df['result'] = df.apply(get_result, axis=1)
 
-# all 12 groups
 GROUPS = {
     'A': ['Mexico', 'South Africa', 'South Korea', 'Czechia'],
     'B': ['Canada', 'Bosnia and Herzegovina', 'Qatar', 'Switzerland'],
@@ -35,6 +34,24 @@ GROUPS = {
     'K': ['Portugal', 'Congo DR', 'Uzbekistan', 'Colombia'],
     'L': ['England', 'Croatia', 'Ghana', 'Panama'],
 }
+
+FLAG_EMOJIS = {
+    'Mexico': '🇲🇽', 'South Africa': '🇿🇦', 'South Korea': '🇰🇷', 'Czechia': '🇨🇿',
+    'Canada': '🇨🇦', 'Bosnia and Herzegovina': '🇧🇦', 'Qatar': '🇶🇦', 'Switzerland': '🇨🇭',
+    'Brazil': '🇧🇷', 'Morocco': '🇲🇦', 'Haiti': '🇭🇹', 'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+    'United States': '🇺🇸', 'Paraguay': '🇵🇾', 'Australia': '🇦🇺', 'Turkey': '🇹🇷',
+    'Germany': '🇩🇪', 'Curacao': '🇨🇼', 'Ivory Coast': '🇨🇮', 'Ecuador': '🇪🇨',
+    'Netherlands': '🇳🇱', 'Japan': '🇯🇵', 'Sweden': '🇸🇪', 'Tunisia': '🇹🇳',
+    'Belgium': '🇧🇪', 'Egypt': '🇪🇬', 'Iran': '🇮🇷', 'New Zealand': '🇳🇿',
+    'Spain': '🇪🇸', 'Cabo Verde': '🇨🇻', 'Saudi Arabia': '🇸🇦', 'Uruguay': '🇺🇾',
+    'France': '🇫🇷', 'Senegal': '🇸🇳', 'Iraq': '🇮🇶', 'Norway': '🇳🇴',
+    'Argentina': '🇦🇷', 'Algeria': '🇩🇿', 'Austria': '🇦🇹', 'Jordan': '🇯🇴',
+    'Portugal': '🇵🇹', 'Congo DR': '🇨🇩', 'Uzbekistan': '🇺🇿', 'Colombia': '🇨🇴',
+    'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Croatia': '🇭🇷', 'Ghana': '🇬🇭', 'Panama': '🇵🇦',
+}
+
+def flag(team):
+    return FLAG_EMOJIS.get(team, '🏳️')
 
 def get_team_matches(data, team):
     matches = data[(data['home_team'] == team) | (data['away_team'] == team)]
@@ -119,7 +136,6 @@ def predict_match(team_a, team_b):
     }
 
 def get_group_matches(teams):
-    # generate all 3v3 matchups in a group (each pair plays once)
     matches = []
     for i in range(len(teams)):
         for j in range(i+1, len(teams)):
@@ -128,8 +144,7 @@ def get_group_matches(teams):
 
 def predict_group_standings(teams):
     points = {team: 0 for team in teams}
-    gd = {team: 0 for team in teams}  # goal difference estimate
-
+    gd = {team: 0 for team in teams}
     matches = get_group_matches(teams)
     for team_a, team_b in matches:
         result = predict_match(team_a, team_b)
@@ -145,67 +160,148 @@ def predict_group_standings(teams):
         else:
             points[team_a] += 1
             points[team_b] += 1
-
     standings = pd.DataFrame({
         'Team': list(points.keys()),
-        'Predicted Points': list(points.values()),
-        'Goal Diff': list(gd.values())
-    }).sort_values(['Predicted Points', 'Goal Diff'], ascending=False).reset_index(drop=True)
+        'Pts': list(points.values()),
+        'GD': list(gd.values())
+    }).sort_values(['Pts', 'GD'], ascending=False).reset_index(drop=True)
     standings.index += 1
     return standings, matches
 
 # page config
-st.set_page_config(page_title="World Cup 2026 Predictor", page_icon="⚽", layout="wide")
-st.title("⚽ FIFA World Cup 2026 — Group Stage Predictor")
-st.write("Select a group to see match predictions and predicted standings")
-
-# group selector
-selected_group = st.selectbox(
-    "Select a Group",
-    [f"Group {g}" for g in GROUPS.keys()]
+st.set_page_config(
+    page_title="World Cup 2026 Predictor",
+    page_icon="⚽",
+    layout="wide"
 )
 
-group_letter = selected_group.split(" ")[1]
-teams = GROUPS[group_letter]
+# session state to track which group is selected
+if 'selected_group' not in st.session_state:
+    st.session_state.selected_group = None
 
-st.subheader(f"Group {group_letter} — {' | '.join(teams)}")
+# header
+st.markdown("""
+    <h1 style='text-align: center; color: white;'>
+        ⚽ FIFA World Cup 2026
+    </h1>
+    <h3 style='text-align: center; color: #aaaaaa;'>
+        Group Stage Predictor
+    </h3>
+    <hr>
+""", unsafe_allow_html=True)
 
-with st.spinner("Running predictions..."):
-    standings, matches = predict_group_standings(teams)
+# if no group selected show homepage
+if st.session_state.selected_group is None:
+    st.markdown("### 🌍 Select a Group to See Predictions")
+    st.write("")
 
-# predicted standings
-st.subheader("📊 Predicted Group Standings")
-st.dataframe(standings, use_container_width=True)
-st.caption("🟢 Top 2 predicted to advance automatically")
+    # show groups in a 4 column grid
+    group_letters = list(GROUPS.keys())
 
-# match predictions
-st.subheader("🔮 Match Predictions")
+    for row_start in range(0, 12, 4):
+        cols = st.columns(4)
+        for col_idx, group_letter in enumerate(group_letters[row_start:row_start+4]):
+            teams = GROUPS[group_letter]
+            with cols[col_idx]:
+                st.markdown(f"""
+                <div style='
+                    background-color: #1e1e2e;
+                    border-radius: 12px;
+                    padding: 16px;
+                    margin-bottom: 16px;
+                    border: 1px solid #333;
+                '>
+                    <h4 style='color: #f0c040; margin-bottom: 10px;'>Group {group_letter}</h4>
+                    {''.join([f"<p style='margin: 4px 0; color: white;'>{flag(t)} {t}</p>" for t in teams])}
+                </div>
+                """, unsafe_allow_html=True)
 
-for team_a, team_b in matches:
-    result = predict_match(team_a, team_b)
-    pred = result['prediction']
+                if st.button(f"View Predictions →", key=f"btn_{group_letter}"):
+                    st.session_state.selected_group = group_letter
+                    st.rerun()
 
-    if pred == 'home win':
-        winner = team_a
-    elif pred == 'away win':
-        winner = team_b
-    else:
-        winner = 'Draw'
+# group predictions page
+else:
+    group_letter = st.session_state.selected_group
+    teams = GROUPS[group_letter]
 
-    with st.expander(f"{team_a} vs {team_b} — Predicted: {'🤝 Draw' if winner == 'Draw' else '🏆 ' + winner}"):
-        fig = go.Figure(go.Bar(
-            x=[team_a + ' wins', 'Draw', team_b + ' wins'],
-            y=[result['home_win_prob'], result['draw_prob'], result['away_win_prob']],
-            marker_color=['#2ecc71', '#95a5a6', '#e74c3c']
-        ))
-        fig.update_layout(
-            yaxis_tickformat='.0%',
-            yaxis_range=[0, 1],
-            height=300
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    if st.button("← Back to All Groups"):
+        st.session_state.selected_group = None
+        st.rerun()
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric(f"{team_a} Win", f"{result['home_win_prob']:.0%}")
-        col2.metric("Draw", f"{result['draw_prob']:.0%}")
-        col3.metric(f"{team_b} Win", f"{result['away_win_prob']:.0%}")
+    st.markdown(f"## Group {group_letter}")
+    st.markdown(" | ".join([f"{flag(t)} {t}" for t in teams]))
+    st.write("")
+
+    with st.spinner("Running predictions..."):
+        standings, matches = predict_group_standings(teams)
+
+    # standings table with color
+    st.subheader("📊 Predicted Standings")
+
+    for i, row in standings.iterrows():
+        if i <= 2:
+            color = "#2ecc71"  # green - advance
+            label = "✅ Advances"
+        elif i == 3:
+            color = "#f39c12"  # yellow - possible third place
+            label = "⚠️ 3rd Place"
+        else:
+            color = "#e74c3c"  # red - eliminated
+            label = "❌ Eliminated"
+
+        st.markdown(f"""
+        <div style='
+            background-color: #1e1e2e;
+            border-left: 4px solid {color};
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        '>
+            <span style='color: white; font-size: 16px;'>
+                <b>{i}.</b> {flag(row['Team'])} {row['Team']}
+            </span>
+            <span style='color: {color};'>
+                {row['Pts']} pts &nbsp; GD {row['GD']:+d} &nbsp; {label}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.write("")
+    st.subheader("🔮 Match Predictions")
+
+    for team_a, team_b in matches:
+        result = predict_match(team_a, team_b)
+        pred = result['prediction']
+
+        if pred == 'home win':
+            winner_text = f"🏆 {team_a} wins"
+        elif pred == 'away win':
+            winner_text = f"🏆 {team_b} wins"
+        else:
+            winner_text = "🤝 Draw"
+
+        with st.expander(f"{flag(team_a)} {team_a} vs {flag(team_b)} {team_b}   —   {winner_text}"):
+            fig = go.Figure(go.Bar(
+                x=[f"{flag(team_a)} {team_a}", "Draw", f"{flag(team_b)} {team_b}"],
+                y=[result['home_win_prob'], result['draw_prob'], result['away_win_prob']],
+                marker_color=['#2ecc71', '#95a5a6', '#e74c3c'],
+                text=[f"{result['home_win_prob']:.0%}", f"{result['draw_prob']:.0%}", f"{result['away_win_prob']:.0%}"],
+                textposition='outside'
+            ))
+            fig.update_layout(
+                yaxis_tickformat='.0%',
+                yaxis_range=[0, 1],
+                height=300,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='white'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric(f"{team_a} Win", f"{result['home_win_prob']:.0%}")
+            col2.metric("Draw", f"{result['draw_prob']:.0%}")
+            col3.metric(f"{team_b} Win", f"{result['away_win_prob']:.0%}")
