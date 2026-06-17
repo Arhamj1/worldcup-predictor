@@ -213,7 +213,7 @@ if st.session_state.selected_group is None:
                     border: 1px solid #333;
                 '>
                     <h4 style='color: #f0c040; margin-bottom: 10px;'>Group {group_letter}</h4>
-                    {''.join([f"<p style='margin: 4px 0; color: white;'>{flag(t)} {t}</p>" for t in teams])}
+                    {''.join([f"<p style='margin: 4px 0; color: white;'>{t}</p>" for t in teams])}
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -231,7 +231,7 @@ else:
         st.rerun()
 
     st.markdown(f"## Group {group_letter}")
-    st.markdown(" | ".join([f"{flag(t)} {t}" for t in teams]))
+    st.markdown(" | ".join([f"{t}" for t in teams]))
     st.write("")
 
     with st.spinner("Running predictions..."):
@@ -262,7 +262,7 @@ else:
             justify-content: space-between;
         '>
             <span style='color: white; font-size: 16px;'>
-                <b>{i}.</b> {flag(row['Team'])} {row['Team']}
+                <b>{i}.</b> {row['Team']}
             </span>
             <span style='color: {color};'>
                 {row['Pts']} pts &nbsp; GD {row['GD']:+d} &nbsp; {label}
@@ -284,7 +284,7 @@ else:
         else:
             winner_text = "🤝 Draw"
 
-        with st.expander(f"{flag(team_a)} {team_a} vs {flag(team_b)} {team_b}   —   {winner_text}"):
+        with st.expander(f"{team_a} vs {team_b}   —   {winner_text}"):
             fig = go.Figure(go.Bar(
                 x=[f"{flag(team_a)} {team_a}", "Draw", f"{flag(team_b)} {team_b}"],
                 y=[result['home_win_prob'], result['draw_prob'], result['away_win_prob']],
